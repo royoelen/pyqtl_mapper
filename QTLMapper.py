@@ -10,7 +10,7 @@ from multiprocessing import Process, Queue
 
 class QTLMapper:
 
-    def __init__(self,  snp_file_location, probe_file_location, covariates_file_location=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None):
+    def __init__(self,  snp_file_location, probe_file_location, covariates_file_location=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, maf=0.01):
         self.qtl_config = QTLConfig.QTLConfig()
         self.qtl_config.snp_file_location = snp_file_location
         self.qtl_config.probe_file_location = probe_file_location
@@ -21,6 +21,7 @@ class QTLMapper:
         self.qtl_config.confinements_snp_location = confinements_snp_location
         self.qtl_config.confinements_probe_location = confinements_probe_location
         self.qtl_config.confinements_snp_probe_pairs_location = confinements_snp_probe_pairs_location
+        self.qtl_config.maf = maf
 
         self.snp_confinement = None
         self.probe_confinement = None
@@ -68,7 +69,7 @@ class QTLMapper:
         return True
 
 
-    def decide_mapping_probe(self, snp_id, probe_id):
+    def confinement_inclusion(self, snp_id, probe_id):
         # if there is no confinement, I guess we'll try
         if self.probe_confinement is None and self.snp_probe_confinement is None:
             return True
@@ -76,15 +77,12 @@ class QTLMapper:
         elif self.probe_confinement is not None and self.snp_probe_confinement is None:
             # now we have to see if the probe is in the inclusion list
             if(len(self.probe_confinement[self.probe_confinement[0].str.contains(snp_id)]) > 0):
-                # okay, now to check if the cis distance is a thing
-                if self.qtl_config.cis_dist is None:
-                    # no cis distance, means no limits
-                    return True
-                else:
-                    if self.check_cis_distance(snp_id, probe_id):
-                        return True
-                    else:
-                        return False
+                return True
+            else:
+                return False
+        # if there is a SNP probe confinement, check if there is a match
+        elif self.snp_probe_confinement is not None:
+            return False
 
 
 
@@ -100,16 +98,41 @@ class QTLMapper:
         for line in probe_active_file_connection:
             # split into pieces
             data_row = line.split(sep='\t')
+            # turn into numpy
+            data_row = numpy.array(data_row)
             # check if it is the header
             if is_header is not True:
                 # the first entry is the identifier
                 probe_id = data_row[0]
-                # check if we want to map the SNP
-                if self.decide_mapping_probe(snp_id, probe_id):
-                    print('hooray')
+                # check for gene confinement
+                if self.confinement_inclusion:
+                    # next check for the cis distance
+                    if self.check_cis_distance(snp_id, probe_id): # okay, now it is worth the effort to check the probe contents
+                        # replace empty values with nans
+                        data_row = numpy.char.replace(data_row, 'na', 'nan')
+                        data_row = numpy.char.replace(data_row, '', 'nan')
+                        # turn into floats
+                        probes = data_row[1:].astype(numpy.float)
+                        # get the valid probes
+                        indices_valid_probes = numpy.where((numpy.isfinite(probes) == False) & (numpy.isnan(probes) == False))
+                        # get the donors with these valid probes
+                        valid_probe_donors = donors_probes[indices_valid_probes]
+                        # overlap with the valid SNP donors
+                        common_donors = numpy.intersect1d(donors_snps, valid_probe_donors, assume_unique=True)
+                        # prepare sorted genotype and probe arrays
+                        genotypes_sorted = numpy.empty(shape=len(common_donors))
+                        probes_sorted = numpy.empty(shape=len(common_donors))
+                        # fill these
+                        for donor in common_donors:
+                            # find the index of the genotype
+                            index_genotype = numpy.where(donors_snps == donor)
+                            # find the index of the probe
+                            index_probe = numpy.where(donors_probes == donor)
+
             else:
                 # need to set the header only once
                 donors_probes = data_row[range(donor_offset, len(data_row, 1))]
+                # subset the
                 is_header = False
 
 
@@ -125,6 +148,8 @@ class QTLMapper:
         for line in self.active_file_connection:
             # split into pieces
             data_row = line.split(sep='\t')
+            # turn into numpy
+            data_row = numpy.array(data_row)
             # check if it is the header
             if is_header is not True:
                 # the first entry is the identifier
@@ -132,16 +157,37 @@ class QTLMapper:
                 # check if we want to map the SNP
                 if self.decide_mapping_snp(snp_id):
                     # get the genotypes
-                    genotypes_list = [int(i) for i in data_row[range(donor_offset, len(data_row), 1)]] # there can be other info fields in addition to the snp id, with the offset you can take this in consideration
+                    genotypes_list = data_row[list(range(donor_offset, len(data_row), 1))] # there can be other info fields in addition to the snp id, with the offset you can take this in consideration
                     # to numpy for speed
                     genotypes = numpy.array(genotypes_list)
+                    # replace the empty entries with -1
+                    genotypes = numpy.char.replace(genotypes, '.', '-1')
+                    genotypes = numpy.char.replace(genotypes, 'nan', '-1')
+                    genotypes[genotypes == '']='-1'
+                    # as floats, not strings of course
+                    genotypes = genotypes.astype(numpy.float)
+                    # check which donors have correct values in the SNPs
+                    indices_valid_genotype = (genotypes >= 0).nonzero()
+                    # subset the donor names and their genotypes
+                    donors_valid_snp = numpy.take(donors_snps, indices_valid_genotype)
+                    genotypes_valid_snp = numpy.take(genotypes, indices_valid_genotype)
+                    # perform mapping with this SNP
+                    self.do_mapping_snp(snp_id, donors_valid_snp, genotypes_valid_snp)
+
+
 
             else:
                 # need to set the header only once
-                donors_snps = data_row[range(donor_offset, len(data_row, 1))]
+                donors_snps = data_row[list(range(donor_offset, len(data_row), 1))]
                 is_header = False
 
-
+    def check_maf(self, genotypes):
+        # doing 0,1,2
+        allele_frequency_alt = sum(genotypes) / (len(genotypes) * 2)
+        minor_allele_frequency = allele_frequency_alt
+        if minor_allele_frequency > 0.5:
+            minor_allele_frequency = 1 - minor_allele_frequency
+        # check against the set MAF
 
 
     def perform_regression(self, X, y):

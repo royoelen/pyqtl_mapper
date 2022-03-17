@@ -3,7 +3,7 @@
 class QTLConfig:
 
 
-    def __init__(self,  snp_file_location=None, probe_file_location=None, covariates_file_location=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, cis_dist=10000):
+    def __init__(self,  snp_file_location=None, probe_file_location=None, covariates_file_location=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, cis_dist=10000, maf=0.01):
         '''
 
         :param snp_file_location:
@@ -26,4 +26,5 @@ class QTLConfig:
         self.confinements_probe_location = confinements_probe_location
         self.confinements_snp_probe_pairs_location = confinements_snp_probe_pairs_location
         self.cis_dist = cis_dist
+        self.maf = maf
 
