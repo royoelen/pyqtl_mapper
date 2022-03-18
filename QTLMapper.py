@@ -1,5 +1,7 @@
 
 import QTLConfig
+import ProbeLocation
+import SNPLocation
 
 from numpy.core.fromnumeric import ndim
 from sklearn import linear_model
@@ -8,13 +10,15 @@ import numpy as numpy
 import pandas as pandas
 from multiprocessing import Process, Queue
 
+
 class QTLMapper:
 
-    def __init__(self,  snp_file_location, probe_file_location, covariates_file_location=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, maf=0.01):
+    def __init__(self,  snp_file_location, probe_file_location, covariates_file_location=None, covariates_to_use=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, maf=0.01):
         self.qtl_config = QTLConfig.QTLConfig()
         self.qtl_config.snp_file_location = snp_file_location
         self.qtl_config.probe_file_location = probe_file_location
         self.qtl_config.covariates_file_location = covariates_file_location
+        self.qtl_config.covariates_to_use = covariates_to_use
         self.qtl_config.snp_positions_file_location = snp_positions_file_location
         self.qtl_config.probe_positions_file_location = probe_positions_file_location
         self.qtl_config.use_model = use_model
@@ -23,10 +27,26 @@ class QTLMapper:
         self.qtl_config.confinements_snp_probe_pairs_location = confinements_snp_probe_pairs_location
         self.qtl_config.maf = maf
 
+        # initialize variables of class
         self.snp_confinement = None
         self.probe_confinement = None
         self.snp_probe_confinement = None
+        self.probe_locations = None
+        self.snp_locations = None
+        self.covariates = None
+
+        # connection to file
         self.active_file_connection = None
+
+        # set confinement files
+        self.set_confinements()
+
+        # set the location files
+        self.set_locations()
+
+        # set the covariates
+        self.set_covariates()
+
 
     def set_confinements(self):
         # read the confinement file for SNPs
@@ -38,6 +58,46 @@ class QTLMapper:
         # read the confinement file for snp-probe combinations
         if self.qtl_config.confinements_snp_probe_pairs_location is not None:
             self.snp_probe_confinement = pandas.read_csv(self.qtl_config.confinements_snp_probe_pairs_location, sep = '\t')
+
+
+    def set_locations(self):
+        # set the locations of the position files
+        if self.qtl_config.snp_positions_file_location is not None:
+            self.snp_locations = SNPLocation.SNPLocation(self.qtl_config.snp_positions_file_location)
+        if self.qtl_config.probe_positions_file_location is not None:
+            self.probe_locations = ProbeLocation.ProbeLocation(self.qtl_config.probe_positions_file_location)
+
+
+    def set_covariates(self):
+        print('would set covariates')
+
+    def check_maf(self, genotypes):
+        # doing 0,1,2
+        allele_frequency_alt = sum(genotypes) / (len(genotypes) * 2)
+        minor_allele_frequency = allele_frequency_alt
+        if minor_allele_frequency > 0.5:
+            minor_allele_frequency = 1 - minor_allele_frequency
+        # check against the set MAF
+        if minor_allele_frequency > self.qtl_config.maf:
+            return True
+        else:
+            return False
+
+
+    def perform_regression(self, X, y):
+        # create a linear regression model
+        model = LinearRegression()
+
+        # do a fit
+        model = model.fit(X, y)
+
+        # coefficient of determination
+        r_sq = model.score(X, y)
+        # t value
+        t = model.t
+        # p value
+        p = model.p
+
 
     def decide_mapping_snp(self, snp_id):
         # if there is no confinement, I guess we'll try
@@ -66,7 +126,22 @@ class QTLMapper:
                 return False
 
     def check_cis_distance(self, snp_id, probe_id):
-        return True
+        # if we don't have a cis distance, we'll just do anything
+        if self.qtl_config.cis_dist is None:
+            return True
+        # zero means also means we'll just do anything
+        elif self.qtl_config.cis_dist == 0:
+            return True
+        # apparently we need to check the cis distance
+        else:
+            # check if we have a positions file set
+            if self.probe_locations is not None and self.snp_locations is not None:
+                # get the snp data
+                snp_data = self.snp_locations.get_snp_position(snp_id)
+                # get the probe data
+                probe_data = self.probe_locations.get_probe_position(probe_id)
+            else:
+                print('using cis distance, but not both snp and probe locations are supplied')
 
 
     def confinement_inclusion(self, snp_id, probe_id):
@@ -85,6 +160,9 @@ class QTLMapper:
             return False
 
 
+    def map_qtl(self, genotype_data, probe_data, genotype_metadata, probe_metadata):
+
+        self.perform_regression(X, y)
 
 
     def do_mapping_snp(self, snp_id, donors_snps, genotypes, donor_offset=1):
@@ -122,12 +200,28 @@ class QTLMapper:
                         # prepare sorted genotype and probe arrays
                         genotypes_sorted = numpy.empty(shape=len(common_donors))
                         probes_sorted = numpy.empty(shape=len(common_donors))
+                        # by using indices
+                        sorted_index = 0
                         # fill these
                         for donor in common_donors:
                             # find the index of the genotype
                             index_genotype = numpy.where(donors_snps == donor)
                             # find the index of the probe
                             index_probe = numpy.where(donors_probes == donor)
+                            # get the genotype
+                            geno_donor = genotypes[index_genotype]
+                            # get the probe
+                            probe_donor = probes[index_probe]
+                            # add to the numpy array
+                            genotypes_sorted[sorted_index] = geno_donor
+                            probes_sorted[sorted_index] = probe_donor
+                            # increase the index
+                            sorted_index = sorted_index + 1
+                        # now check if we are okay with the MAF
+                        if self.check_maf(genotypes_sorted):
+                            print('blie')
+                        else:
+                            print('blah')
 
             else:
                 # need to set the header only once
@@ -181,28 +275,7 @@ class QTLMapper:
                 donors_snps = data_row[list(range(donor_offset, len(data_row), 1))]
                 is_header = False
 
-    def check_maf(self, genotypes):
-        # doing 0,1,2
-        allele_frequency_alt = sum(genotypes) / (len(genotypes) * 2)
-        minor_allele_frequency = allele_frequency_alt
-        if minor_allele_frequency > 0.5:
-            minor_allele_frequency = 1 - minor_allele_frequency
-        # check against the set MAF
 
-
-    def perform_regression(self, X, y):
-        # create a linear regression model
-        model = LinearRegression()
-
-        # do a fit
-        model = model.fit(X, y)
-
-        # coefficient of determination
-        r_sq = model.score(X, y)
-        # t value
-        t = model.t
-        # p value
-        p = model.p
 
 
     def read_chunks_once(self, file_connection, chunk_size=1024):
