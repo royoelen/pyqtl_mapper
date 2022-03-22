@@ -1,6 +1,7 @@
 import QTLConfig
 
 import numpy as numpy
+import warnings
 
 class ProbeLocation:
 
@@ -12,6 +13,8 @@ class ProbeLocation:
         self.chromosome_loc = None
         self.probe_start_loc = None
         self.probe_stop_loc = None
+        # actually set up
+        self.set_up_locations(probe_locations_file_location)
 
 
     def set_up_locations(self, probe_locations_file_location):
@@ -45,16 +48,22 @@ class ProbeLocation:
                     self.probe_to_index[split_line[0]] = index
                     self.chromosome_loc[index] = split_line[1]
                     self.probe_start_loc[index] = int(split_line[2])
-                    self.probe_to_index[index] = int(split_line[3])
+                    self.probe_stop_loc[index] = int(split_line[3])
+                    # increase the index for the next round
+                    index = index + 1
 
     def get_probe_position(self, probe_name):
-        # get the index for the probe
-        probe_index = self.probe_to_index[probe_name]
-        # put result in dictionary
-        probe_info = {
-            'geneid' : probe_name,
-            'chr' : self.chromosome_loc[probe_index],
-            'left' : self.probe_start_loc[probe_index],
-            'right' : self.probe_stop_loc[probe_index]
-        }
+        # init variable
+        probe_info = None
+        # if it exists, get the data
+        if probe_name in self.probe_to_index:
+            # get the index for the probe
+            probe_index = self.probe_to_index[probe_name]
+            # put result in dictionary
+            probe_info = {
+                'geneid' : probe_name,
+                'chr' : self.chromosome_loc[probe_index],
+                'left' : self.probe_start_loc[probe_index],
+                'right' : self.probe_stop_loc[probe_index]
+            }
         return probe_info

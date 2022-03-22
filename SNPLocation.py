@@ -11,6 +11,8 @@ class SNPLocation:
         # the there will be two numpy arrays containing the variables we need
         self.chromosome_loc = None
         self.snp_loc = None
+        # actually set up
+        self.set_up_locations(snp_locations_file_location)
 
 
 
@@ -45,12 +47,16 @@ class SNPLocation:
                     self.snp_loc[index] = int(split_line[2])
 
     def get_snp_position(self, snp_name):
-        # get the index for the probe
-        snp_index = self.snp_to_index[snp_name]
-        # put result in dictionary
-        snp_info = {
-            'snpid' : snp_name,
-            'chr' : self.chromosome_loc[snp_index],
-            'pos' : self.snp_loc[snp_index],
-        }
+        # init variable
+        snp_info = None
+        # if it exists, get the data
+        if snp_name in self.snp_to_index:
+            # get the index for the probe
+            snp_index = self.snp_to_index[snp_name]
+            # put result in dictionary
+            snp_info = {
+                'snpid' : snp_name,
+                'chr' : self.chromosome_loc[snp_index],
+                'pos' : self.snp_loc[snp_index],
+            }
         return snp_info

@@ -8,6 +8,7 @@ from sklearn import linear_model
 from scipy import stats
 import numpy as numpy
 import pandas as pandas
+import warnings
 from multiprocessing import Process, Queue
 
 
@@ -140,8 +141,23 @@ class QTLMapper:
                 snp_data = self.snp_locations.get_snp_position(snp_id)
                 # get the probe data
                 probe_data = self.probe_locations.get_probe_position(probe_id)
+                # check if there was data for the probe
+                if probe_data is not None and snp_data is not None:
+                    # check if within cis distance
+                    max_loc_left = probe_data['left'] - self.qtl_config.cis_dist
+                    max_loc_right = probe_data['right'] + self.qtl_config.cis_dist
+                    # check if the probe is somewhere between these locations, on the same chromosome
+                    if probe_data['chr'] == snp_data['chr'] and max_loc_left <= snp_data['pos'] <= max_loc_right:
+                        return True
+                    else:
+                        return False
+
+                else:
+                    warnings.warn(' '.join(['probe and/or SNP location not found in location file, skipping entry', str(snp_data), str(probe_data)]))
+                    return False
             else:
-                print('using cis distance, but not both snp and probe locations are supplied')
+                print('using cis distance, but not both snp and probe locations are supplied, this will cause all probes to be skipped')
+                return False
 
 
     def confinement_inclusion(self, snp_id, probe_id):
@@ -167,7 +183,7 @@ class QTLMapper:
 
     def do_mapping_snp(self, snp_id, donors_snps, genotypes, donor_offset=1):
         # open connection with the gene file, this we will do for every SNP, to be able to do it in parallel
-        probe_active_file_connection = open(self.qtl_config.confinements_snp_location)
+        probe_active_file_connection = open(self.qtl_config.probe_file_location)
         # we will get the header
         donors_probes = None
         # and remember it was the header
@@ -188,11 +204,10 @@ class QTLMapper:
                     if self.check_cis_distance(snp_id, probe_id): # okay, now it is worth the effort to check the probe contents
                         # replace empty values with nans
                         data_row = numpy.char.replace(data_row, 'na', 'nan')
-                        data_row = numpy.char.replace(data_row, '', 'nan')
                         # turn into floats
                         probes = data_row[1:].astype(numpy.float)
                         # get the valid probes
-                        indices_valid_probes = numpy.where((numpy.isfinite(probes) == False) & (numpy.isnan(probes) == False))
+                        indices_valid_probes = numpy.where(numpy.isfinite(probes))
                         # get the donors with these valid probes
                         valid_probe_donors = donors_probes[indices_valid_probes]
                         # overlap with the valid SNP donors
@@ -225,7 +240,7 @@ class QTLMapper:
 
             else:
                 # need to set the header only once
-                donors_probes = data_row[range(donor_offset, len(data_row, 1))]
+                donors_probes = data_row[range(donor_offset, len(data_row), 1)]
                 # subset the
                 is_header = False
 
@@ -267,8 +282,6 @@ class QTLMapper:
                     genotypes_valid_snp = numpy.take(genotypes, indices_valid_genotype)
                     # perform mapping with this SNP
                     self.do_mapping_snp(snp_id, donors_valid_snp, genotypes_valid_snp)
-
-
 
             else:
                 # need to set the header only once
