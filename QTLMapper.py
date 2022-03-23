@@ -2,6 +2,7 @@
 import QTLConfig
 import ProbeLocation
 import SNPLocation
+import Covariates
 
 from numpy.core.fromnumeric import ndim
 from sklearn import linear_model
@@ -70,7 +71,8 @@ class QTLMapper:
 
 
     def set_covariates(self):
-        print('would set covariates')
+        if self.qtl_config.covariates_file_location is not None:
+            self.covariates = Covariates.Covariates(self.qtl_config.covariates_file_location, self.qtl_config.covariates_to_use)
 
     def check_maf(self, genotypes):
         # doing 0,1,2
@@ -153,7 +155,7 @@ class QTLMapper:
                         return False
 
                 else:
-                    warnings.warn(' '.join(['probe and/or SNP location not found in location file, skipping entry', str(snp_data), str(probe_data)]))
+                    warnings.warn(' '.join(['probe and/or SNP location not found in location file, skipping entry', str(snp_id), ';', str(snp_data), ',', str(probe_id), ':', str(probe_data)]))
                     return False
             else:
                 print('using cis distance, but not both snp and probe locations are supplied, this will cause all probes to be skipped')
@@ -212,6 +214,9 @@ class QTLMapper:
                         valid_probe_donors = donors_probes[indices_valid_probes]
                         # overlap with the valid SNP donors
                         common_donors = numpy.intersect1d(donors_snps, valid_probe_donors, assume_unique=True)
+                        # also check with the covariates if we use those
+                        if self.covariates is not None:
+                            valid_covariate_donors = self.covariates.get_valid_donors()
                         # prepare sorted genotype and probe arrays
                         genotypes_sorted = numpy.empty(shape=len(common_donors))
                         probes_sorted = numpy.empty(shape=len(common_donors))
