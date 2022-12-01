@@ -14,15 +14,12 @@ class SNPLocation:
         # actually set up
         self.set_up_locations(snp_locations_file_location)
 
-
-
     def set_up_locations(self, snp_locations_file_location):
         # create the index file
         self.snp_to_index = {}
         # we will use numpy arrays for the variables
         self.chromosome_loc = numpy.empty(1, dtype='S3')
         self.snp_loc = numpy.empty(1, dtype='uint64')
-
         # there is header
         at_header = True
         # and we will keep an index

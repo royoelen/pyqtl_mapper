@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument('-sc', '--confinements_snp_location', type = str, help = 'location snp confinement file (string)')
     parser.add_argument('-pc', '--confinements_probe_location', type = str, help = 'location of probe confinement file (string)')
     parser.add_argument('-cps', '--confinements_snp_probe_pairs_location', type = str, help = 'location snp-probe confinement file (string)')
+    parser.add_argument('-o', '--output_location', type = str, help = 'location snp-probe confinement file (string)')
     return parser
 
 
@@ -35,6 +36,7 @@ def get_test_args():
         'confinements_snp_location' : None,
         'confinements_probe_location' : None,
         'confinements_snp_probe_pairs_location' : None,
+        'output_location' : '/Users/royoelen/hanze-master/2021/pqtl_results.tsv',
         's' : '/Users/royoelen/hanze-master/2021/CeD_genotypes_adjusted27082018.txt',
         'p' : '/Users/royoelen/hanze-master/2021/geuvadis_normalised_gene_expression_adjusted27082018.txt',
         'c' : None,
@@ -43,11 +45,11 @@ def get_test_args():
         'm' : 'linear',
         'sc' : None,
         'pc' : None,
-        'cps' : None
+        'cps' : None,
+        'o' : '/Users/royoelen/hanze-master/2021/pqtl_results.tsv'
     }
     return test_args
 
-@staticmethod
 def args_to_QTLMapper(args):
     print(args)
     qtl_mapper = QTLMapper.QTLMapper(
@@ -59,11 +61,11 @@ def args_to_QTLMapper(args):
         use_model = args['use_model'],
         confinements_snp_location = args['confinements_snp_location'],
         confinements_probe_location = args['confinements_probe_location'],
-        confinements_snp_probe_pairs_location = args['confinements_snp_probe_pairs_location']
+        confinements_snp_probe_pairs_location = args['confinements_snp_probe_pairs_location'],
+        output_location = args['output_location']
     )
     return qtl_mapper
 
-@staticmethod
 def test():
     '''
 

@@ -16,7 +16,6 @@ class ProbeLocation:
         # actually set up
         self.set_up_locations(probe_locations_file_location)
 
-
     def set_up_locations(self, probe_locations_file_location):
         # create the index file
         self.probe_to_index = {}

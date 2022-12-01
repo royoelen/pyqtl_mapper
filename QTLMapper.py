@@ -9,16 +9,18 @@ from sklearn import linear_model
 from scipy import stats
 import numpy as numpy
 import pandas as pandas
+import statsmodels.stats.multitest as multitest
 import warnings
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, Pool
 
 
 class QTLMapper:
 
-    def __init__(self,  snp_file_location, probe_file_location, covariates_file_location=None, covariates_to_use=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, maf=0.01):
+    def __init__(self,  snp_file_location, probe_file_location, output_location, covariates_file_location=None, covariates_to_use=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, maf=0.01):
         self.qtl_config = QTLConfig.QTLConfig()
         self.qtl_config.snp_file_location = snp_file_location
         self.qtl_config.probe_file_location = probe_file_location
+        self.qtl_config.output_location = output_location
         self.qtl_config.covariates_file_location = covariates_file_location
         self.qtl_config.covariates_to_use = covariates_to_use
         self.qtl_config.snp_positions_file_location = snp_positions_file_location
@@ -28,6 +30,7 @@ class QTLMapper:
         self.qtl_config.confinements_probe_location = confinements_probe_location
         self.qtl_config.confinements_snp_probe_pairs_location = confinements_snp_probe_pairs_location
         self.qtl_config.maf = maf
+
 
         # initialize variables of class
         self.snp_confinement = None
@@ -90,16 +93,9 @@ class QTLMapper:
     def perform_regression(self, X, y):
         # create a linear regression model
         model = LinearRegression()
-
         # do a fit
         model = model.fit(X, y)
-
-        # coefficient of determination
-        r_sq = model.score(X, y)
-        # t value
-        t = model.t
-        # p value
-        p = model.p
+        return model
 
 
     def decide_mapping_snp(self, snp_id):
@@ -149,6 +145,7 @@ class QTLMapper:
                     max_loc_left = probe_data['left'] - self.qtl_config.cis_dist
                     max_loc_right = probe_data['right'] + self.qtl_config.cis_dist
                     # check if the probe is somewhere between these locations, on the same chromosome
+                    #print(' '.join([str(probe_data['chr']), str(snp_data['chr']), str(snp_data['pos']), str(max_loc_left), str(max_loc_right)]))
                     if probe_data['chr'] == snp_data['chr'] and max_loc_left <= snp_data['pos'] <= max_loc_right:
                         return True
                     else:
@@ -178,9 +175,59 @@ class QTLMapper:
             return False
 
 
-    def map_qtl(self, genotype_data, probe_data, genotype_metadata, probe_metadata):
+    def map_qtl(self, probe_values, covariate_table, genotypes_sorted):
+        # initilialize models
+        model_null = None
+        model_genotypes = None
+        # we can only do this if there is metadata
+        if covariate_table is not None:
+            # perform regression without the genotypes
+            model_null = self.perform_regression(covariate_table, probe_values)
+            # perform the regression with the genotypes
+            covariate_table['snp'] = genotypes_sorted
+        else:
+            covariate_table = pandas.DataFrame({'snp':genotypes_sorted})
+        # regresss with genotypes
+        model_genotypes = self.perform_regression(covariate_table, probe_values)
+        # extract information from the genotype model
 
-        self.perform_regression(X, y)
+        # coefficient of determination
+        r_sq = model_genotypes.score(covariate_table, probe_values)
+        # t value
+        t = model_genotypes.t[0][0]
+        # p value
+        p = model_genotypes.p[0][0]
+
+        result = {'r_sq' : r_sq, 't' : t, 'p' : p}
+
+        # now if we did a null regression, we can see how well we predict with the genotypes and without the genotypes
+        if model_null is not None:
+            rss_null = model_null.ssr
+            rss_geno = model_genotypes.ssr
+            # TODO further implementation
+
+        return result
+
+
+
+
+    def get_genotype_metadata_as_pandas(self, donors):
+        # initialize value
+        covars_pandas = None
+        # we can only fill in the value if it is not none
+        if self.covariates is not None:
+            # turn the metadata into a pandas dataframe
+            covars_pandas = pandas.DataFrame({covariate:list(np_array) for covariate,np_array in self.covariates.covariates.items()})
+            # get the indices of the donors using list comprehension
+            covariate_donor_indices = [self.covariates.donor_to_index.get(donor) for donor in donors]
+            # subset to the indices of the donors
+            covars_pandas = covars_pandas.iloc(covariate_donor_indices)
+
+        return covars_pandas
+
+
+    def get_probe_metadata_as_pandas(self, donors):
+        print('unimplemented')
 
 
     def do_mapping_snp(self, snp_id, donors_snps, genotypes, donor_offset=1):
@@ -190,6 +237,8 @@ class QTLMapper:
         donors_probes = None
         # and remember it was the header
         is_header = True
+        # save the results
+        results = []
         # check each line
         for line in probe_active_file_connection:
             # split into pieces
@@ -216,7 +265,12 @@ class QTLMapper:
                         common_donors = numpy.intersect1d(donors_snps, valid_probe_donors, assume_unique=True)
                         # also check with the covariates if we use those
                         if self.covariates is not None:
+                            # get valid covariate donors
                             valid_covariate_donors = self.covariates.get_valid_donors()
+                            # convert to numpy array
+                            valid_covariate_donors = numpy.array(valid_covariate_donors)
+                            # then go to common donors
+                            common_donors = numpy.intersect1d(common_donors, valid_covariate_donors)
                         # prepare sorted genotype and probe arrays
                         genotypes_sorted = numpy.empty(shape=len(common_donors))
                         probes_sorted = numpy.empty(shape=len(common_donors))
@@ -239,23 +293,59 @@ class QTLMapper:
                             sorted_index = sorted_index + 1
                         # now check if we are okay with the MAF
                         if self.check_maf(genotypes_sorted):
-                            print('blie')
+                            # get a Pandas dataframe with the metadata
+                            total_covariates = self.get_genotype_metadata_as_pandas(common_donors)
+                            # perform the regression
+                            result_snp_gene = self.map_qtl(probes_sorted, total_covariates, genotypes_sorted)
+                            # add the snp and gene as keys
+                            result_snp_gene['snp'] = snp_id
+                            result_snp_gene['probe'] = probe_id
+                            # add to the results
+                            results.append(result_snp_gene)
                         else:
-                            print('blah')
-
+                            warnings.warn(' '.join(['skipping due to MAF', snp_id]))
+                    # if we are not in the cis distance
+                    else:
+                        pass
+                # if the gene was no in the confinement
+                else:
+                    pass
+            # this is the header
             else:
                 # need to set the header only once
                 donors_probes = data_row[range(donor_offset, len(data_row), 1)]
                 # subset the
                 is_header = False
+        # return list of results
+        return results
 
+    def filter_and_map_snp(self, data_row, donor_offset, donors_snps, snp_id):
+        # get the genotypes
+        genotypes_list = data_row[list(range(donor_offset, len(data_row), 1))] # there can be other info fields in addition to the snp id, with the offset you can take this in consideration
+        # to numpy for speed
+        genotypes = numpy.array(genotypes_list)
+        # replace the empty entries with -1
+        genotypes = numpy.char.replace(genotypes, '.', '-1')
+        genotypes = numpy.char.replace(genotypes, 'nan', '-1')
+        genotypes[genotypes == '']='-1'
+        # as floats, not strings of course
+        genotypes = genotypes.astype(numpy.float)
+        # check which donors have correct values in the SNPs
+        indices_valid_genotype = (genotypes >= 0).nonzero()
+        # subset the donor names and their genotypes
+        donors_valid_snp = numpy.take(donors_snps, indices_valid_genotype)
+        genotypes_valid_snp = numpy.take(genotypes, indices_valid_genotype)
+        # perform mapping with this SNP
+        result = self.do_mapping_snp(snp_id, donors_valid_snp, genotypes_valid_snp)
+        return result
 
     def perform_mapping(self, donor_offset=1):
         # open connection with SNP file
         self.active_file_connection = open(self.qtl_config.snp_file_location)
         # we will get the header
         donors_snps = None
-
+        # we will have a result per SNP
+        results = []
         # and remember it was the header
         is_header = True
         # check each line
@@ -270,29 +360,29 @@ class QTLMapper:
                 snp_id = data_row[0]
                 # check if we want to map the SNP
                 if self.decide_mapping_snp(snp_id):
-                    # get the genotypes
-                    genotypes_list = data_row[list(range(donor_offset, len(data_row), 1))] # there can be other info fields in addition to the snp id, with the offset you can take this in consideration
-                    # to numpy for speed
-                    genotypes = numpy.array(genotypes_list)
-                    # replace the empty entries with -1
-                    genotypes = numpy.char.replace(genotypes, '.', '-1')
-                    genotypes = numpy.char.replace(genotypes, 'nan', '-1')
-                    genotypes[genotypes == '']='-1'
-                    # as floats, not strings of course
-                    genotypes = genotypes.astype(numpy.float)
-                    # check which donors have correct values in the SNPs
-                    indices_valid_genotype = (genotypes >= 0).nonzero()
-                    # subset the donor names and their genotypes
-                    donors_valid_snp = numpy.take(donors_snps, indices_valid_genotype)
-                    genotypes_valid_snp = numpy.take(genotypes, indices_valid_genotype)
-                    # perform mapping with this SNP
-                    self.do_mapping_snp(snp_id, donors_valid_snp, genotypes_valid_snp)
+                    # this could be made into a parallel process
+                    #with Pool() as pool:
+                    #    result = pool.map(self.filter_and_map_snp, [data_row, donor_offset, donors_snps, snp_id])
+                    result = self.filter_and_map_snp(data_row, donor_offset, donors_snps, snp_id)
+                    # add to the array
+                    results.append(result)
+                else:
+                    warnings.warn(' '.join(['skipping', snp_id]))
 
             else:
                 # need to set the header only once
                 donors_snps = data_row[list(range(donor_offset, len(data_row), 1))]
                 is_header = False
-
+        # use nested comprehension to merge the list of lists
+        results = [j for i in results for j in i]
+        # turn the result into pandas dataframe
+        results_pandas = pandas.DataFrame.from_dict(results)
+        print(results_pandas)
+        # do FDR correction
+        results_pandas['BH'] = multitest.multipletests(pvals = results_pandas['p'].values.tolist(), method = 'fdr_bh')[1]
+        # sort by corrected p
+        results_pandas.sort_values(by = 'BH', inplace = True)
+        print(results_pandas)
 
 
 

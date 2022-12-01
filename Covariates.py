@@ -3,12 +3,12 @@ import numpy
 
 class Covariates:
 
+
     def __init__(self, covariate_file_location, covariates_to_use=None):
-        self.covariate_to_index = None
+        #self.covariate_to_index = None
         self.donor_to_index = None
         self.covariates = None
         self.set_up_covariates(covariate_file_location, covariates_to_use)
-
 
     def set_up_covariates(self, covariate_file_location, covariates_to_use=None, donor_column='donor'):
         # we will initialize the mappings for where the donors and covariates will be in the 2d numpy array
@@ -67,4 +67,4 @@ class Covariates:
     def get_valid_donors(self):
         # TODO actually implement
         print('get_valid_donors not implemented')
-        return self.donor_to_index.keys()
+        return list(self.donor_to_index.keys())
