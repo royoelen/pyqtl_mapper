@@ -15,8 +15,27 @@ from multiprocessing import Process, Queue, Pool
 
 
 class QTLMapper:
+    """
+    Class to perform QTL mapping
+    """
 
-    def __init__(self,  snp_file_location, probe_file_location, output_location, covariates_file_location=None, covariates_to_use=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, maf=0.01):
+    def __init__(self,  snp_file_location, probe_file_location, output_location, covariates_file_location=None, covariates_to_use=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, maf=0.01, cis_dist=1000000):
+        """
+
+        :param snp_file_location: location of the SNP file, expected to be tsv with variant name, then variants per donor
+        :param probe_file_location: location of the probe file, expected to tsv with probe name, then value per donor
+        :param output_location: output tsv location of the resulting mapping
+        :param covariates_file_location: location of the covariates file, expected to be tsv
+        :param covariates_to_use: covariates to use, need to match the column names in covariates file
+        :param snp_positions_file_location: position annotation file for variants
+        :param probe_positions_file_location: position annotation file for probes
+        :param use_model: the type of regression model to use
+        :param confinements_snp_location: optional SNP confinement, variant names need to match the snp file variant names
+        :param confinements_probe_location: optional probe confinement, probe names need to match the probe file probe names
+        :param confinements_snp_probe_pairs_location: optional SNP-probe confinement, , variant names need to match the snp file variant names, probe names need to match the probe file probe names
+        :param maf: minimal minor allele frequency cutoff to consider a variant worth performing QTL mappinf for
+        :param cis_dist: max distance from the probe start or stop, that a SNP is still considered within cis distance for
+        """
         self.qtl_config = QTLConfig.QTLConfig()
         self.qtl_config.snp_file_location = snp_file_location
         self.qtl_config.probe_file_location = probe_file_location
@@ -30,7 +49,7 @@ class QTLMapper:
         self.qtl_config.confinements_probe_location = confinements_probe_location
         self.qtl_config.confinements_snp_probe_pairs_location = confinements_snp_probe_pairs_location
         self.qtl_config.maf = maf
-
+        self.qtl_config.cis_dist = cis_dist
 
         # initialize variables of class
         self.snp_confinement = None
@@ -52,8 +71,11 @@ class QTLMapper:
         # set the covariates
         self.set_covariates()
 
-
     def set_confinements(self):
+        """
+        set the confinements from the input
+        :return: None
+        """
         # read the confinement file for SNPs
         if self.qtl_config.confinements_snp_location is not None:
             self.snp_confinement = pandas.read_csv(self.qtl_config.confinements_snp_location, sep = '\t')
@@ -64,23 +86,35 @@ class QTLMapper:
         if self.qtl_config.confinements_snp_probe_pairs_location is not None:
             self.snp_probe_confinement = pandas.read_csv(self.qtl_config.confinements_snp_probe_pairs_location, sep = '\t')
 
-
     def set_locations(self):
+        """
+        set the locations from the input
+        :return: None
+        """
         # set the locations of the position files
         if self.qtl_config.snp_positions_file_location is not None:
             self.snp_locations = SNPLocation.SNPLocation(self.qtl_config.snp_positions_file_location)
         if self.qtl_config.probe_positions_file_location is not None:
             self.probe_locations = ProbeLocation.ProbeLocation(self.qtl_config.probe_positions_file_location)
 
-
     def set_covariates(self):
+        """
+        set the covariates from the input
+        :return: None
+        """
         if self.qtl_config.covariates_file_location is not None:
             self.covariates = Covariates.Covariates(self.qtl_config.covariates_file_location, self.qtl_config.covariates_to_use)
 
     def check_maf(self, genotypes):
+        """
+        check the minor allele frequency of given genotypes
+        :param genotypes: genotypes in 0 homozygous wildtype, 1 heterozygote, 2 homozygous mutant format
+        :return: whether the minor allele frequency was below the cutoff
+        """
         # doing 0,1,2
         allele_frequency_alt = sum(genotypes) / (len(genotypes) * 2)
         minor_allele_frequency = allele_frequency_alt
+        # minor allele 0.1 is the same as 0.9 actually, so we need to check both ways
         if minor_allele_frequency > 0.5:
             minor_allele_frequency = 1 - minor_allele_frequency
         # check against the set MAF
@@ -89,16 +123,25 @@ class QTLMapper:
         else:
             return False
 
-
     def perform_regression(self, X, y):
+        """
+        perform regression
+        :param X: a pandas dataframe containing the variates to use for the prediction
+        :param y: the predicted value
+        :return: a LinearRegression object, resulting from running the regression
+        """
         # create a linear regression model
         model = LinearRegression()
         # do a fit
         model = model.fit(X, y)
         return model
 
-
     def decide_mapping_snp(self, snp_id):
+        """
+        decide on whether or not consider the supplied SNP for QTL mapping
+        :param snp_id: the variant ID of the supplied SNP
+        :return: whether or not the supplied SNP should be considered for QTL mapping
+        """
         # if there is no confinement, I guess we'll try
         if self.snp_confinement is None and self.snp_probe_confinement is None:
             return True
@@ -125,6 +168,12 @@ class QTLMapper:
                 return False
 
     def check_cis_distance(self, snp_id, probe_id):
+        """
+        check whether or not a given variant is within cis distance of a given probe
+        :param snp_id: the variant ID of the SNP
+        :param probe_id: the name of the probe
+        :return: whether or not the given SNP was within cis distance of the given probe
+        """
         # if we don't have a cis distance, we'll just do anything
         if self.qtl_config.cis_dist is None:
             return True
@@ -142,8 +191,15 @@ class QTLMapper:
                 # check if there was data for the probe
                 if probe_data is not None and snp_data is not None:
                     # check if within cis distance
-                    max_loc_left = probe_data['left'] - self.qtl_config.cis_dist
-                    max_loc_right = probe_data['right'] + self.qtl_config.cis_dist
+                    max_loc_left = None
+                    max_loc_right = None
+                    # depending on the strand, left and right can be different
+                    if probe_data['right'] > probe_data['left']:
+                        max_loc_left = probe_data['left'] - self.qtl_config.cis_dist
+                        max_loc_right = probe_data['right'] + self.qtl_config.cis_dist
+                    elif probe_data['right'] < probe_data['left']:
+                        max_loc_left = probe_data['left'] + self.qtl_config.cis_dist
+                        max_loc_right = probe_data['right'] - self.qtl_config.cis_dist
                     # check if the probe is somewhere between these locations, on the same chromosome
                     #print(' '.join([str(probe_data['chr']), str(snp_data['chr']), str(snp_data['pos']), str(max_loc_left), str(max_loc_right)]))
                     if probe_data['chr'] == snp_data['chr'] and max_loc_left <= snp_data['pos'] <= max_loc_right:
@@ -151,31 +207,80 @@ class QTLMapper:
                     else:
                         return False
 
+                elif probe_data is None and snp_data is not None:
+                    warnings.warn(' '.join(['probe location not found in location file, skipping entry', str(snp_id), ';', str(snp_data), ',', str(probe_id), ':', str(probe_data)]))
+                    return False
+                elif probe_data is not None and snp_data is None:
+                    warnings.warn(' '.join(['snp location not found in location file, skipping entry', str(snp_id), ';', str(snp_data), ',', str(probe_id), ':', str(probe_data)]))
+                    return False
                 else:
-                    warnings.warn(' '.join(['probe and/or SNP location not found in location file, skipping entry', str(snp_id), ';', str(snp_data), ',', str(probe_id), ':', str(probe_data)]))
+                    # should never happen
+                    #warnings.warn(' '.join(['probe and/or SNP location not found in location file, skipping entry', str(snp_id), ';', str(snp_data), ',', str(probe_id), ':', str(probe_data)]))
                     return False
             else:
                 print('using cis distance, but not both snp and probe locations are supplied, this will cause all probes to be skipped')
                 return False
 
-
     def confinement_inclusion(self, snp_id, probe_id):
+        """
+        check if a snp-probe combination is present in our confinement. If the confinement files were not supplied, they are not used, and TRUE will be returned
+
+        :param snp_id: the variant identifier
+        :param probe_id: the probe identifier
+        :return: whether the combination was present in the confinement. If the confinement files were not supplied, they are not used, and TRUE will be returned
+        """
         # if there is no confinement, I guess we'll try
-        if self.probe_confinement is None and self.snp_probe_confinement is None:
+        if self.probe_confinement is None and self.snp_probe_confinement is None and self.snp_confinement is None:
             return True
-        # if there is a probe confinement, check if it is in there
-        elif self.probe_confinement is not None and self.snp_probe_confinement is None:
+        # if there is only a probe confinement
+        elif self.probe_confinement is not None and self.snp_probe_confinement is None and self.snp_confinement is None:
             # now we have to see if the probe is in the inclusion list
-            if(len(self.probe_confinement[self.probe_confinement[0].str.contains(snp_id)]) > 0):
+            if(len(self.probe_confinement[self.probe_confinement[0].str.contains(probe_id)]) > 0):
                 return True
             else:
                 return False
-        # if there is a SNP probe confinement, check if there is a match
-        elif self.snp_probe_confinement is not None:
-            return False
-
+        # if there is only a SNP confinement
+        elif self.probe_confinement is None and self.snp_probe_confinement is None and self.snp_confinement is not None:
+            # now we have to see if the probe is in the inclusion list
+            if(len(self.snp_confinement[self.snp_confinement[0].str.contains(snp_id)]) > 0):
+                return True
+            else:
+                return False
+        # if there is a only a snp-probe confinement, check if it is in there
+        elif self.probe_confinement is None and self.snp_probe_confinement is not None and self.snp_confinement is None:
+            # now we have to see if the snp-probe combination is in the inclusion list
+            if self.snp_probe_confinement[(self.snp_probe_confinement['snp'] == snp_id & self.snp_probe_confinement['probe'] == probe_id)].shape[1] > 0:
+                return True
+            else:
+                return False
+        # if there is a snp-probe confinement, and a snp confinement
+        elif self.probe_confinement is None and self.snp_probe_confinement is not None and self.snp_confinement is not None:
+            if self.snp_probe_confinement[(self.snp_probe_confinement['snp'] == snp_id & self.snp_probe_confinement['probe'] == probe_id)].shape[1] > 0 and len(self.snp_confinement[self.snp_confinement[0].str.contains(snp_id)]) > 0:
+                return True
+            else:
+                return False
+        # if there is a snp-probe confinement, and a probe confinement
+        elif self.probe_confinement is not None and self.snp_probe_confinement is not None and self.snp_confinement is None:
+            if self.snp_probe_confinement[(self.snp_probe_confinement['snp'] == snp_id & self.snp_probe_confinement['probe'] == probe_id)].shape[1] > 0 and len(self.probe_confinement[self.probe_confinement[0].str.contains(probe_id)]) > 0:
+                return True
+            else:
+                return False
+        # if all three confinements are present
+        elif self.probe_confinement is not None and self.snp_probe_confinement is not None and self.snp_confinement is not None:
+            if self.snp_probe_confinement[(self.snp_probe_confinement['snp'] == snp_id & self.snp_probe_confinement['probe'] == probe_id)].shape[1] > 0 and len(self.snp_confinement[self.snp_confinement[0].str.contains(snp_id)]) > 0 and len(self.probe_confinement[self.probe_confinement[0].str.contains(probe_id)]) > 0:
+                return True
+            else:
+                return False
 
     def map_qtl(self, probe_values, covariate_table, genotypes_sorted):
+        """
+        perform the QTL mapping
+
+        :param probe_values: the values for the probe, sorted as the covariate table and genotypes
+        :param covariate_table: the covariate table, sorted as the probe values and genotypes
+        :param genotypes_sorted: the genotypes, sorted as the covariate table and probes
+        :return: a dictionary containing the result of the mapping
+        """
         # initilialize models
         model_null = None
         model_genotypes = None
@@ -208,10 +313,12 @@ class QTLMapper:
 
         return result
 
-
-
-
     def get_genotype_metadata_as_pandas(self, donors):
+        """
+        get the metadata for the given donors, in that donor order
+        :param donors: the donors to fetch the metadata for
+        :return: the metadata for the given donors in that donor order
+        """
         # initialize value
         covars_pandas = None
         # we can only fill in the value if it is not none
@@ -229,8 +336,16 @@ class QTLMapper:
     def get_probe_metadata_as_pandas(self, donors):
         print('unimplemented')
 
-
     def do_mapping_snp(self, snp_id, donors_snps, genotypes, donor_offset=1):
+        """
+        perform the QTL mapping for a given variant
+
+        :param snp_id: the variant ID
+        :param donors_snps: the donors that we have the variant for
+        :param genotypes: the genotypes of the donors
+        :param donor_offset: the offset fo the genotype file where the genotypes start
+        :return: list of dictionaries containing the result of each mapping
+        """
         # open connection with the gene file, this we will do for every SNP, to be able to do it in parallel
         probe_active_file_connection = open(self.qtl_config.probe_file_location)
         # we will get the header
@@ -320,6 +435,15 @@ class QTLMapper:
         return results
 
     def filter_and_map_snp(self, data_row, donor_offset, donors_snps, snp_id):
+        """
+        perform QTL mapping for a given SNP
+
+        :param data_row: numpy array containing the genotypes of the donors
+        :param donor_offset: there can be other info fields in addition to the snp id, with the offset you can take this in consideration
+        :param donors_snps: the donors the genotypes are for
+        :param snp_id: the variant ID under examination
+        :return: list of dictionaries containing the results
+        """
         # get the genotypes
         genotypes_list = data_row[list(range(donor_offset, len(data_row), 1))] # there can be other info fields in addition to the snp id, with the offset you can take this in consideration
         # to numpy for speed
@@ -377,12 +501,12 @@ class QTLMapper:
         results = [j for i in results for j in i]
         # turn the result into pandas dataframe
         results_pandas = pandas.DataFrame.from_dict(results)
-        print(results_pandas)
         # do FDR correction
         results_pandas['BH'] = multitest.multipletests(pvals = results_pandas['p'].values.tolist(), method = 'fdr_bh')[1]
         # sort by corrected p
-        results_pandas.sort_values(by = 'BH', inplace = True)
-        print(results_pandas)
+        results_pandas.sort_values(by = 'p', inplace = True)
+        print('writing results to : ' + self.qtl_config.output_location)
+        results_pandas.to_csv(self.qtl_config.output_location, sep = '\t', index = False)
 
 
 

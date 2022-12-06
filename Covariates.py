@@ -2,15 +2,31 @@
 import numpy
 
 class Covariates:
-
+    """
+    Holder for covariates used in QTL mapping.
+    """
 
     def __init__(self, covariate_file_location, covariates_to_use=None):
+        """
+        constructor
+
+        :param covariate_file_location: the location of the tsv file to read that contains the covariates
+        :param covariates_to_use: which covariates to use in the QTL mapping. names need to match column names of covariate file
+        """
         #self.covariate_to_index = None
         self.donor_to_index = None
         self.covariates = None
         self.set_up_covariates(covariate_file_location, covariates_to_use)
 
     def set_up_covariates(self, covariate_file_location, covariates_to_use=None, donor_column='donor'):
+        """
+        set up the variables in the object
+
+        :param covariate_file_location: the location of the tsv file to read that contains the covariates
+        :param covariates_to_use: which covariates to use in the QTL mapping. names need to match column names of covariate file
+        :param donor_column: the column in the covariates file that contains the donor
+        :return: None
+        """
         # we will initialize the mappings for where the donors and covariates will be in the 2d numpy array
         self.covariates = {}
         self.donor_to_index = {}

@@ -6,11 +6,11 @@ import argparse
 import QTLMapper
 
 def parse_args():
-    '''
+    """
     parse the command line arguments
 
     :return: a dictionary with keys and values like they would be created by argparse
-    '''
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-s', '--snp_file_location', type = str, help = 'location of the snp file (string)')
     parser.add_argument('-p', '--probe_file_location', type = str, help = 'location of the probe file (string)')
@@ -22,10 +22,16 @@ def parse_args():
     parser.add_argument('-pc', '--confinements_probe_location', type = str, help = 'location of probe confinement file (string)')
     parser.add_argument('-cps', '--confinements_snp_probe_pairs_location', type = str, help = 'location snp-probe confinement file (string)')
     parser.add_argument('-o', '--output_location', type = str, help = 'location snp-probe confinement file (string)')
+    parser.add_argument('-cd', '--cis_distance', type = int, help = 'cis distance (integer)')
     return parser
 
 
 def get_test_args():
+    """
+    set up debug arguments to test the application
+
+    :return: a dictionary with the debug arguments that would otherwise be created from argparse
+    """
     test_args = {
         'snp_file_location' : '/Users/royoelen/hanze-master/2021/CeD_genotypes_adjusted27082018.txt',
         'probe_file_location' : '/Users/royoelen/hanze-master/2021/geuvadis_normalised_gene_expression_adjusted27082018.txt',
@@ -36,7 +42,8 @@ def get_test_args():
         'confinements_snp_location' : None,
         'confinements_probe_location' : None,
         'confinements_snp_probe_pairs_location' : None,
-        'output_location' : '/Users/royoelen/hanze-master/2021/pqtl_results.tsv',
+        'output_location' : '/Users/royoelen/hanze-master/2021/pyqtl_results.tsv',
+        'cis_distance' : 1000000,
         's' : '/Users/royoelen/hanze-master/2021/CeD_genotypes_adjusted27082018.txt',
         'p' : '/Users/royoelen/hanze-master/2021/geuvadis_normalised_gene_expression_adjusted27082018.txt',
         'c' : None,
@@ -46,11 +53,18 @@ def get_test_args():
         'sc' : None,
         'pc' : None,
         'cps' : None,
-        'o' : '/Users/royoelen/hanze-master/2021/pqtl_results.tsv'
+        'o' : '/Users/royoelen/hanze-master/2021/pyqtl_results.tsv',
+        'c' : 1000000
     }
     return test_args
 
 def args_to_QTLMapper(args):
+    """
+    convert the argparse objects into a QTLMapper object for QTL mapping
+
+    :param args: an argparse object (or debug dictionary containing the same values)
+    :return: an object of type QTLMapper, ready to be run
+    """
     print(args)
     qtl_mapper = QTLMapper.QTLMapper(
         snp_file_location = args['snp_file_location'],
@@ -62,15 +76,16 @@ def args_to_QTLMapper(args):
         confinements_snp_location = args['confinements_snp_location'],
         confinements_probe_location = args['confinements_probe_location'],
         confinements_snp_probe_pairs_location = args['confinements_snp_probe_pairs_location'],
-        output_location = args['output_location']
+        output_location = args['output_location'],
+        cis_dist = args['cis_distance']
     )
     return qtl_mapper
 
 def test():
-    '''
+    """
 
-    :return:
-    '''
+    :return: None
+    """
     # get the test arguments
     args = get_test_args()
     # create QTLMapper
@@ -78,6 +93,20 @@ def test():
     # map
     qtl_mapper.perform_mapping()
 
+
+def map():
+    """
+    perform QTL mapping
+
+    :return: None
+    """
+
+    # fetch arguments from the command line
+    arguments = parse_args()
+    # get a QTLMapper object
+    qtl_mapper = args_to_QTLMapper(arguments)
+    # perform the QTL mapping
+    qtl_mapper.perform_mapping()
 
 # start
 if __name__ == '__main__':
