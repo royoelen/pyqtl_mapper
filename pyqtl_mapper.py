@@ -23,7 +23,9 @@ def parse_args():
     parser.add_argument('-cps', '--confinements_snp_probe_pairs_location', type = str, help = 'location snp-probe confinement file (string)')
     parser.add_argument('-o', '--output_location', type = str, help = 'location snp-probe confinement file (string)')
     parser.add_argument('-cd', '--cis_distance', type = int, help = 'cis distance (integer)')
-    return parser
+    parser.add_argument('-td', '--cis', type = bool, help = 'cis or trans mapping, cis is True, trans is False')
+    args = vars(parser.parse_args())
+    return args
 
 
 def get_test_args():
@@ -44,6 +46,7 @@ def get_test_args():
         'confinements_snp_probe_pairs_location' : None,
         'output_location' : '/Users/royoelen/hanze-master/2021/pyqtl_results.tsv',
         'cis_distance' : 1000000,
+        'cis' : True,
         's' : '/Users/royoelen/hanze-master/2021/CeD_genotypes_adjusted27082018.txt',
         'p' : '/Users/royoelen/hanze-master/2021/geuvadis_normalised_gene_expression_adjusted27082018.txt',
         'c' : None,
@@ -77,7 +80,8 @@ def args_to_QTLMapper(args):
         confinements_probe_location = args['confinements_probe_location'],
         confinements_snp_probe_pairs_location = args['confinements_snp_probe_pairs_location'],
         output_location = args['output_location'],
-        cis_dist = args['cis_distance']
+        cis_dist = args['cis_distance'],
+        cis = args['cis']
     )
     return qtl_mapper
 
@@ -113,5 +117,5 @@ if __name__ == '__main__':
     '''
     application start
     '''
-    test()
-    #map()
+    #test()
+    map()

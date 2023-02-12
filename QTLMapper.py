@@ -19,7 +19,7 @@ class QTLMapper:
     Class to perform QTL mapping
     """
 
-    def __init__(self,  snp_file_location, probe_file_location, output_location, covariates_file_location=None, covariates_to_use=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, maf=0.01, cis_dist=1000000):
+    def __init__(self,  snp_file_location, probe_file_location, output_location, covariates_file_location=None, covariates_to_use=None, snp_positions_file_location = None, probe_positions_file_location=None, use_model='linear', confinements_snp_location=None, confinements_probe_location=None, confinements_snp_probe_pairs_location=None, maf=0.01, cis_dist=1000000, cis=True):
         """
 
         :param snp_file_location: location of the SNP file, expected to be tsv with variant name, then variants per donor
@@ -35,6 +35,7 @@ class QTLMapper:
         :param confinements_snp_probe_pairs_location: optional SNP-probe confinement, , variant names need to match the snp file variant names, probe names need to match the probe file probe names
         :param maf: minimal minor allele frequency cutoff to consider a variant worth performing QTL mappinf for
         :param cis_dist: max distance from the probe start or stop, that a SNP is still considered within cis distance for
+        :param cis: whether it is a cis or trans mapping, True is cis, False is trans
         """
         self.qtl_config = QTLConfig.QTLConfig()
         self.qtl_config.snp_file_location = snp_file_location
@@ -50,6 +51,7 @@ class QTLMapper:
         self.qtl_config.confinements_snp_probe_pairs_location = confinements_snp_probe_pairs_location
         self.qtl_config.maf = maf
         self.qtl_config.cis_dist = cis_dist
+        self.qtl_config.cis = cis
 
         # initialize variables of class
         self.snp_confinement = None
@@ -203,9 +205,23 @@ class QTLMapper:
                     # check if the probe is somewhere between these locations, on the same chromosome
                     #print(' '.join([str(probe_data['chr']), str(snp_data['chr']), str(snp_data['pos']), str(max_loc_left), str(max_loc_right)]))
                     if probe_data['chr'] == snp_data['chr'] and max_loc_left <= snp_data['pos'] <= max_loc_right:
-                        return True
+                        # if we are doing a cis mapping, that is alright
+                        if self.qtl_config.cis is True:
+                            return True
+                        # of course it is reverse for a trans mapping
+                        elif self.qtl_config.cis is False:
+                            return False
+                        # and it it is anything else, that is bad
+                        else:
+                            warnings.warn([' '].join(['cis should be True or False, instead it is ', str(self.qtl_config.cis)]))
+                            return False
                     else:
-                        return False
+                        # if we are doing a cis mapping, it is either on a different chromosome, or too far away
+                        if self.qtl_config.cis is True:
+                            return False
+                        # but for a trans mapping, that is exactly what we want
+                        elif self.qtl_config.cis is False:
+                            return True
 
                 elif probe_data is None and snp_data is not None:
                     warnings.warn(' '.join(['probe location not found in location file, skipping entry', str(snp_id), ';', str(snp_data), ',', str(probe_id), ':', str(probe_data)]))
@@ -464,6 +480,13 @@ class QTLMapper:
         return result
 
     def perform_mapping(self, donor_offset=1):
+        """
+        perform QTL mapping
+
+        :param donor_offset: in the genotype data, there might be columns on the left side of the table that describe the data, the offset is where the actual genotype data starts
+        :return: None
+        """
+
         # open connection with SNP file
         self.active_file_connection = open(self.qtl_config.snp_file_location)
         # we will get the header
@@ -508,15 +531,16 @@ class QTLMapper:
         print('writing results to : ' + self.qtl_config.output_location)
         results_pandas.to_csv(self.qtl_config.output_location, sep = '\t', index = False)
 
+    def read_chunks_once(file_connection, chunk_size=1024):
+        """
+        read chunks of a file
 
+        :param file_connection: connection to the file
+        :param chunk_size: the size of the chunks
+        :return: None
+        """
 
-    def read_chunks_once(self, file_connection, chunk_size=1024):
-        '''
-
-        :param file_connection:
-        :param chunk_size:
-        :return:
-        '''
+        # TODO actually implement this, right now we use per-line reading elsewhere in the code
         while True:
             data = file_connection.read(chunk_size)
             if not data:
@@ -548,7 +572,8 @@ class LinearRegression(linear_model.LinearRegression):
         sse = numpy.sum((self.predict(X) - y) ** 2, axis=0) / float(X.shape[0] - X.shape[1])
         # standard error
         se = numpy.array([numpy.sqrt(numpy.diagonal(sse * numpy.linalg.inv(numpy.dot(X.T, X))))])
-
+        # calculate the T statistic
         self.t = self.coef_ / se
+        # calculate the p
         self.p = 2 * (1 - stats.t.cdf(numpy.abs(self.t), y.shape[0] - X.shape[1]))
         return self
