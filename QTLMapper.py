@@ -150,21 +150,21 @@ class QTLMapper:
         # if we have just a SNP confinement, check if the SNP is in there
         elif self.snp_confinement is not None and self.snp_probe_confinement is None:
             # check if it is in the snp confinement
-            if len(self.snp_confinement[self.snp_confinement[0].str.contains(snp_id)]) > 0:
+            if len(self.snp_confinement[self.snp_confinement.iloc[:, 0].str.contains(snp_id)]) > 0:
                 return True
             else:
                 return False
         # if there is a snp-probe confinement, also check for the SNP
-        elif self.snp_confinement is  None and self.snp_probe_confinement is not None:
+        elif self.snp_confinement is None and self.snp_probe_confinement is not None:
             # check if it is in the snp confinement
-            if len(self.snp_probe_confinement[self.snp_probe_confinement[0].str.contains(snp_id)]) > 0:
+            if len(self.snp_probe_confinement[self.snp_probe_confinement.iloc[:, 0].str.contains(snp_id)]) > 0:
                 return True
             else:
                 return False
         # for both, I guess we will check both
         elif self.snp_confinement is not None and self.snp_probe_confinement is not None:
             # check if it is in the snp confinement and the snp-probe confinement
-            if (len(self.snp_confinement[self.snp_confinement[0].str.contains(snp_id)]) > 0) and (len(self.snp_probe_confinement[self.snp_probe_confinement[0].str.contains(snp_id)]) > 0):
+            if (len(self.snp_confinement[self.snp_confinement.iloc[:, 0].str.contains(snp_id)]) > 0) and (len(self.snp_probe_confinement[self.snp_probe_confinement.iloc[:, 0].str.contains(snp_id)]) > 0):
                 return True
             else:
                 return False
@@ -251,39 +251,39 @@ class QTLMapper:
         # if there is only a probe confinement
         elif self.probe_confinement is not None and self.snp_probe_confinement is None and self.snp_confinement is None:
             # now we have to see if the probe is in the inclusion list
-            if(len(self.probe_confinement[self.probe_confinement[0].str.contains(probe_id)]) > 0):
+            if(len(self.probe_confinement[self.probe_confinement.iloc[:, 0].str.contains(probe_id)]) > 0):
                 return True
             else:
                 return False
         # if there is only a SNP confinement
         elif self.probe_confinement is None and self.snp_probe_confinement is None and self.snp_confinement is not None:
             # now we have to see if the probe is in the inclusion list
-            if(len(self.snp_confinement[self.snp_confinement[0].str.contains(snp_id)]) > 0):
+            if(len(self.snp_confinement[self.snp_confinement.iloc[:, 0].str.contains(snp_id)]) > 0):
                 return True
             else:
                 return False
         # if there is a only a snp-probe confinement, check if it is in there
         elif self.probe_confinement is None and self.snp_probe_confinement is not None and self.snp_confinement is None:
             # now we have to see if the snp-probe combination is in the inclusion list
-            if self.snp_probe_confinement[(self.snp_probe_confinement['snp'] == snp_id & self.snp_probe_confinement['probe'] == probe_id)].shape[1] > 0:
+            if self.snp_probe_confinement[(self.snp_probe_confinement.iloc[:, 0] == snp_id) & (self.snp_probe_confinement.iloc[:, 1] == probe_id)].shape[0] > 0:
                 return True
             else:
                 return False
         # if there is a snp-probe confinement, and a snp confinement
         elif self.probe_confinement is None and self.snp_probe_confinement is not None and self.snp_confinement is not None:
-            if self.snp_probe_confinement[(self.snp_probe_confinement['snp'] == snp_id & self.snp_probe_confinement['probe'] == probe_id)].shape[1] > 0 and len(self.snp_confinement[self.snp_confinement[0].str.contains(snp_id)]) > 0:
+            if self.snp_probe_confinement[(self.snp_probe_confinement.iloc[:, 0] == snp_id) & (self.snp_probe_confinement.iloc[:, 1] == probe_id)].shape[0] > 0 and self.snp_confinement[self.snp_confinement.iloc[:, 0].str.contains(snp_id)].shape[0] > 0:
                 return True
             else:
                 return False
         # if there is a snp-probe confinement, and a probe confinement
         elif self.probe_confinement is not None and self.snp_probe_confinement is not None and self.snp_confinement is None:
-            if self.snp_probe_confinement[(self.snp_probe_confinement['snp'] == snp_id & self.snp_probe_confinement['probe'] == probe_id)].shape[1] > 0 and len(self.probe_confinement[self.probe_confinement[0].str.contains(probe_id)]) > 0:
+            if self.snp_probe_confinement[(self.snp_probe_confinement.iloc[:, 0] == snp_id) & (self.snp_probe_confinement.iloc[:, 1] == probe_id)].shape[0] > 0 and self.probe_confinement[self.probe_confinement.iloc[:, 0].str.contains(probe_id)].shape[0] > 0:
                 return True
             else:
                 return False
         # if all three confinements are present
         elif self.probe_confinement is not None and self.snp_probe_confinement is not None and self.snp_confinement is not None:
-            if self.snp_probe_confinement[(self.snp_probe_confinement['snp'] == snp_id & self.snp_probe_confinement['probe'] == probe_id)].shape[1] > 0 and len(self.snp_confinement[self.snp_confinement[0].str.contains(snp_id)]) > 0 and len(self.probe_confinement[self.probe_confinement[0].str.contains(probe_id)]) > 0:
+            if self.snp_probe_confinement[(self.snp_probe_confinement.iloc[:, 0] == snp_id) & (self.snp_probe_confinement.iloc[:, 1] == probe_id)].shape[0] > 0 and self.snp_confinement[self.snp_confinement.iloc[:, 0].str.contains(snp_id)].shape[0] > 0 and self.probe_confinement[self.probe_confinement.iloc[:, 0].str.contains(probe_id)].shape[0] > 0:
                 return True
             else:
                 return False
@@ -381,7 +381,7 @@ class QTLMapper:
                 # the first entry is the identifier
                 probe_id = data_row[0]
                 # check for gene confinement
-                if self.confinement_inclusion:
+                if self.confinement_inclusion(snp_id, probe_id):
                     # next check for the cis distance
                     if self.check_cis_distance(snp_id, probe_id): # okay, now it is worth the effort to check the probe contents
                         # replace empty values with nans
