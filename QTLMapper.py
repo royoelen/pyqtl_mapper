@@ -387,7 +387,7 @@ class QTLMapper:
                         # replace empty values with nans
                         data_row = numpy.char.replace(data_row, 'na', 'nan')
                         # turn into floats
-                        probes = data_row[1:].astype(numpy.float)
+                        probes = data_row[1:].astype(float)
                         # get the valid probes
                         indices_valid_probes = numpy.where(numpy.isfinite(probes))
                         # get the donors with these valid probes
@@ -469,7 +469,7 @@ class QTLMapper:
         genotypes = numpy.char.replace(genotypes, 'nan', '-1')
         genotypes[genotypes == '']='-1'
         # as floats, not strings of course
-        genotypes = genotypes.astype(numpy.float)
+        genotypes = genotypes.astype(float)
         # check which donors have correct values in the SNPs
         indices_valid_genotype = (genotypes >= 0).nonzero()
         # subset the donor names and their genotypes
